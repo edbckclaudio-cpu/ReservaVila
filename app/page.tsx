@@ -19,6 +19,7 @@ type Reservation = {
   client_name: string
   guest_count: number
   reservation_time: string
+  phone: string | null
   notes: string | null
 }
 
@@ -54,7 +55,12 @@ export default function Page() {
     const normalized = (data || []).map((r) => {
       const v = String((r as any).shift || "").toLowerCase()
       const n = v === "almoco" || v === "almoço" || v === "lunch" ? "lunch" : v === "jantar" || v === "dinner" ? "dinner" : "lunch"
-      return { ...(r as any), shift: n }
+      let phoneValue = (r as any).phone ?? null
+      if (!phoneValue && (r as any).notes) {
+        const m = String((r as any).notes).match(/Telefone:\s*([+\d][\d\s\-]+)/i)
+        if (m) phoneValue = m[1].replace(/\s+/g, "")
+      }
+      return { ...(r as any), shift: n, phone: phoneValue }
     })
     setReservations(normalized)
   }
@@ -105,7 +111,14 @@ export default function Page() {
     setReservationTime(existing?.reservation_time || (shift === "lunch" ? "12:00" : "19:00"))
     setNotes(existing?.notes || "")
     setHasExisting(!!existing)
-    setPhone("")
+    if (existing?.phone) {
+      setPhone(existing.phone)
+    } else if (existing?.notes) {
+      const m = existing.notes.match(/Telefone:\s*([+\d][\d\s\-]+)/i)
+      setPhone(m ? m[1].replace(/\s+/g, "") : "")
+    } else {
+      setPhone("")
+    }
     setOpen(true)
   }
 
@@ -113,15 +126,21 @@ export default function Page() {
     if (!currentTable) return
     setSaving(true)
     setErrorMsg(null)
+    const dbShift = currentShift === "lunch" ? "almoco" : "jantar"
+    const cleanNotes = (notes || "").replace(/Telefone:\s*\+?\d[\d\s\-]*/i, "").trim()
+    const notesWithPhone =
+      phone ? (cleanNotes ? `Telefone: ${phone} | ${cleanNotes}` : `Telefone: ${phone}`) : cleanNotes
     const payload = {
       date: isoDate,
-      shift: currentShift,
+      shift: dbShift,
       table_number: currentTable,
       client_name: clientName,
       guest_count: guestCount,
       reservation_time: reservationTime,
-      notes: notes || null
+      phone: phone || null,
+      notes: notesWithPhone || null
     }
+    let lastShiftUsed = payload.shift
     let { error } = await supabase
       .from("reservations")
       .upsert(payload, {
@@ -130,25 +149,62 @@ export default function Page() {
     setSaving(false)
     if (error) {
       const alt1 = currentShift === "lunch" ? "almoco" : "jantar"
-      const alt2 = currentShift === "lunch" ? "Lunch" : "Dinner"
-      const alt3 = currentShift === "lunch" ? "Almoço" : "Jantar"
-      const tries = [alt1, alt2, alt3]
+      const alt2 = currentShift === "lunch" ? "Almoço" : "Jantar"
+      const alt3 = currentShift === "lunch" ? "lunch" : "dinner"
+      const alt4 = currentShift === "lunch" ? "Lunch" : "Dinner"
+      const alt5 = currentShift === "lunch" ? "ALMOCO" : "JANTAR"
+      const alt6 = currentShift === "lunch" ? "LUNCH" : "DINNER"
+      const tries = [alt1, alt2, alt3, alt4, alt5, alt6]
       for (const t of tries) {
         const { error: e2 } = await supabase
           .from("reservations")
           .upsert({ ...payload, shift: t }, { onConflict: "date,shift,table_number" })
         if (!e2) {
           error = null
+          lastShiftUsed = t
           break
         } else {
           error = e2
         }
       }
       if (error) {
-        setErrorMsg(error.message)
-        return
+        const msg = String(error.message || "").toLowerCase()
+        const isPhoneSchemaError =
+          msg.includes("schema cache") ||
+          msg.includes("'phone'") ||
+          msg.includes("phone column")
+        if (isPhoneSchemaError) {
+          for (const t of tries) {
+            const { error: e3 } = await supabase
+              .from("reservations")
+              .upsert(
+                {
+                  date: payload.date,
+                  shift: t,
+                  table_number: payload.table_number,
+                  client_name: payload.client_name,
+                  guest_count: payload.guest_count,
+                  reservation_time: payload.reservation_time,
+                  notes: payload.notes
+                },
+                { onConflict: "date,shift,table_number" }
+              )
+            if (!e3) {
+              error = null
+              lastShiftUsed = t
+              break
+            } else {
+              error = e3
+            }
+          }
+        }
+        if (error) {
+          setErrorMsg(error.message)
+          return
+        }
       }
     }
+    // Persistência do telefone já embutida nas observações para máxima compatibilidade
     await fetchData()
     setOpen(false)
   }
