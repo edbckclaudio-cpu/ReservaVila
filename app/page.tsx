@@ -275,9 +275,15 @@ export default function Page() {
           className={
             r
               ? "rounded-md border border-green-600 text-black p-2 text-xs flex flex-col items-start justify-start min-h-[60px]"
-              : "rounded-md border border-gray-300 bg-gray-100 p-2 text-xs flex items-center justify-center min-h-[60px]"
+              : "rounded-md border border-gray-300 p-2 text-xs flex items-center justify-center min-h-[60px]"
           }
-          style={r ? { backgroundColor: "#86efac" } : undefined}
+          style={
+            r
+              ? { backgroundColor: "#86efac" }
+              : shift === "dinner"
+              ? { backgroundColor: "#fed7aa" }
+              : { backgroundColor: "#f3f4f6" }
+          }
         >
           {r ? (
             <div className="w-full">
