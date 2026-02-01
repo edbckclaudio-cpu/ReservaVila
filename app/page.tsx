@@ -307,8 +307,26 @@ export default function Page() {
       .in("shift", altVals)
       .eq("table_number", currentTable)
     if (error) {
-      setErrorMsg(error.message)
-      return
+      const msg = String(error.message || "").toLowerCase()
+      const isPhoneSchemaError =
+        msg.includes("schema cache") ||
+        msg.includes("'phone'") ||
+        msg.includes("phone column")
+      if (isPhoneSchemaError) {
+        const { error: e2 } = await supabase
+          .from("reservations")
+          .update({ notes: combined || null })
+          .eq("date", isoDate)
+          .in("shift", altVals)
+          .eq("table_number", currentTable)
+        if (e2) {
+          setErrorMsg(e2.message)
+          return
+        }
+      } else {
+        setErrorMsg(error.message)
+        return
+      }
     }
     setArrived(true)
     await fetchData()
@@ -330,7 +348,7 @@ export default function Page() {
           style={
             r
               ? r.arrived
-                ? { backgroundColor: "#93c5fd" }
+                ? { backgroundColor: "#fde68a" }
                 : { backgroundColor: "#86efac" }
               : shift === "dinner"
               ? { backgroundColor: "#fed7aa" }
