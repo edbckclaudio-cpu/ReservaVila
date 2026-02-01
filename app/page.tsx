@@ -42,6 +42,7 @@ export default function Page() {
   const [phone, setPhone] = useState("")
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [arrived, setArrived] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
 
   const isoDate = useMemo(() => format(selectedDate, "yyyy-MM-dd"), [selectedDate])
 
@@ -71,6 +72,21 @@ export default function Page() {
   useEffect(() => {
     fetchData()
   }, [isoDate])
+
+  useEffect(() => {
+    const update = () => {
+      try {
+        setIsMobile(typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches)
+      } catch {
+        setIsMobile(false)
+      }
+    }
+    update()
+    if (typeof window !== "undefined") {
+      window.addEventListener("resize", update)
+      return () => window.removeEventListener("resize", update)
+    }
+  }, [])
 
   useEffect(() => {
     const channel = supabase
@@ -444,26 +460,61 @@ export default function Page() {
             <div className="space-y-3">
               <div>
                 <label className="text-sm">Hora</label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="HH:MM"
-                  value={reservationTime}
-                  onChange={(e) => {
-                    const v = e.target.value.replace(/[^\d:]/g, "")
-                    setReservationTime(v)
-                  }}
-                  onBlur={(e) => {
-                    const m = e.target.value.match(/^(\d{1,2}):(\d{1,2})$/)
-                    if (m) {
-                      const h = Math.min(23, parseInt(m[1], 10))
-                      const min = Math.min(59, parseInt(m[2], 10))
-                      const hh = h.toString().padStart(2, "0")
-                      const mm = min.toString().padStart(2, "0")
-                      setReservationTime(`${hh}:${mm}`)
-                    }
-                  }}
-                />
+                {isMobile ? (
+                  <Input
+                    type="time"
+                    step={60}
+                    value={reservationTime}
+                    onChange={(e) => {
+                      const m = e.target.value.match(/^(\d{1,2}):(\d{1,2})$/)
+                      if (m) {
+                        const h = Math.min(23, parseInt(m[1], 10))
+                        const min = Math.min(59, parseInt(m[2], 10))
+                        const hh = h.toString().padStart(2, "0")
+                        const mm = min.toString().padStart(2, "0")
+                        setReservationTime(`${hh}:${mm}`)
+                      }
+                    }}
+                  />
+                ) : (
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="HH:MM"
+                    value={reservationTime}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^\d:]/g, "")
+                      setReservationTime(v)
+                    }}
+                    onBlur={(e) => {
+                      const s = e.target.value.trim()
+                      let h = 0
+                      let min = 0
+                      let matched = false
+                      const m1 = s.match(/^(\d{1,2}):(\d{1,2})$/)
+                      if (m1) {
+                        h = Math.min(23, parseInt(m1[1], 10))
+                        min = Math.min(59, parseInt(m1[2], 10))
+                        matched = true
+                      } else {
+                        const m2 = s.match(/^(\d{3,4})$/)
+                        if (m2) {
+                          const d = m2[1]
+                          const partH = d.length === 3 ? d.slice(0, 1) : d.slice(0, 2)
+                          const partM = d.length === 3 ? d.slice(1, 3) : d.slice(2, 4)
+                          h = Math.min(23, parseInt(partH, 10))
+                          min = Math.min(59, parseInt(partM, 10))
+                          matched = true
+                        }
+                      }
+                      if (matched) {
+                        const hh = h.toString().padStart(2, "0")
+                        const mm = min.toString().padStart(2, "0")
+                        setReservationTime(`${hh}:${mm}`)
+                      }
+                    }}
+                  />
+                )}
               </div>
               <div>
                 <label className="text-sm">Nome do Cliente</label>
