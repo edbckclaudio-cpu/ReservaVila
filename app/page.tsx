@@ -21,6 +21,7 @@ type Reservation = {
   reservation_time: string
   phone: string | null
   notes: string | null
+  arrived?: boolean
 }
 
 type Shift = "lunch" | "dinner"
@@ -40,6 +41,7 @@ export default function Page() {
   const [removing, setRemoving] = useState(false)
   const [phone, setPhone] = useState("")
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [arrived, setArrived] = useState(false)
 
   const isoDate = useMemo(() => format(selectedDate, "yyyy-MM-dd"), [selectedDate])
 
@@ -60,7 +62,8 @@ export default function Page() {
         const m = String((r as any).notes).match(/Telefone:\s*([+\d][\d\s\-]+)/i)
         if (m) phoneValue = m[1].replace(/\s+/g, "")
       }
-      return { ...(r as any), shift: n, phone: phoneValue }
+      const arrivedFlag = !!String((r as any).notes || "").match(/\bchegou\b/i)
+      return { ...(r as any), shift: n, phone: phoneValue, arrived: arrivedFlag }
     })
     setReservations(normalized)
   }
@@ -76,8 +79,20 @@ export default function Page() {
         "postgres_changes",
         { event: "*", schema: "public", table: "reservations", filter: `date=eq.${isoDate}` },
         (payload) => {
-          const newRow = payload.new as Reservation
-          const oldRow = payload.old as Reservation
+          const normalize = (row: any): Reservation => {
+            if (!row) return row
+            const v = String(row.shift || "").toLowerCase()
+            const n = v === "almoco" || v === "almoço" || v === "lunch" ? "lunch" : v === "jantar" || v === "dinner" ? "dinner" : "lunch"
+            let phoneValue = row.phone ?? null
+            if (!phoneValue && row.notes) {
+              const m = String(row.notes).match(/Telefone:\s*([+\d][\d\s\-]+)/i)
+              if (m) phoneValue = m[1].replace(/\s+/g, "")
+            }
+            const arrivedFlag = !!String(row.notes || "").match(/\bchegou\b/i)
+            return { ...(row as any), shift: n, phone: phoneValue, arrived: arrivedFlag }
+          }
+          const newRow = normalize(payload.new)
+          const oldRow = normalize(payload.old)
           setReservations((prev) => {
             if (payload.eventType === "INSERT") return [...prev, newRow]
             if (payload.eventType === "UPDATE")
@@ -111,6 +126,7 @@ export default function Page() {
     setReservationTime(existing?.reservation_time || (shift === "lunch" ? "12:00" : "19:00"))
     setNotes(existing?.notes || "")
     setHasExisting(!!existing)
+    setArrived(!!existing?.arrived)
     if (existing?.phone) {
       setPhone(existing.phone)
     } else if (existing?.notes) {
@@ -264,6 +280,40 @@ export default function Page() {
     setOpen(false)
   }
 
+  const markArrived = async () => {
+    if (!currentTable || !hasExisting || arrived) return
+    setErrorMsg(null)
+    const altVals = [
+      currentShift,
+      currentShift === "lunch" ? "almoco" : "jantar",
+      currentShift === "lunch" ? "Almoço" : "Jantar",
+      currentShift === "lunch" ? "Lunch" : "Dinner",
+      currentShift === "lunch" ? "ALMOCO" : "JANTAR",
+      currentShift === "lunch" ? "LUNCH" : "DINNER"
+    ]
+    const cleanNotes = (notes || "")
+      .replace(/Telefone:\s*\+?\d[\d\s\-]*/i, "")
+      .replace(/\bStatus:\s*chegou\b/i, "")
+      .replace(/\bchegou\b/i, "")
+      .trim()
+    const phonePart = phone ? `Telefone: ${phone}` : ""
+    const statusPart = "Status: chegou"
+    const combined =
+      [statusPart, phonePart, cleanNotes].filter(Boolean).join(" | ")
+    let { error } = await supabase
+      .from("reservations")
+      .update({ notes: combined || null, phone: phone || null })
+      .eq("date", isoDate)
+      .in("shift", altVals)
+      .eq("table_number", currentTable)
+    if (error) {
+      setErrorMsg(error.message)
+      return
+    }
+    setArrived(true)
+    await fetchData()
+  }
+
   const renderGrid = (shift: Shift) => {
     const items = []
     for (let i = 1; i <= 40; i++) {
@@ -279,7 +329,9 @@ export default function Page() {
           }
           style={
             r
-              ? { backgroundColor: "#86efac" }
+              ? r.arrived
+                ? { backgroundColor: "#93c5fd" }
+                : { backgroundColor: "#86efac" }
               : shift === "dinner"
               ? { backgroundColor: "#fed7aa" }
               : { backgroundColor: "#f3f4f6" }
@@ -352,6 +404,17 @@ export default function Page() {
             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-md rounded-lg border border-black p-4 shadow-2xl z-[100]"
             style={{ backgroundColor: "#f59e0b", opacity: 1 }}
           >
+            {hasExisting && (
+              <div className="absolute right-3 top-3">
+                <Button
+                  onClick={markArrived}
+                  disabled={arrived}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  Chegou
+                </Button>
+              </div>
+            )}
             <Dialog.Title className="text-lg font-semibold mb-2">
               {currentShift === "lunch" ? "Reserva • Almoço" : "Reserva • Jantar"} {currentTable ? `• Mesa ${currentTable}` : ""}
             </Dialog.Title>
@@ -363,7 +426,26 @@ export default function Page() {
             <div className="space-y-3">
               <div>
                 <label className="text-sm">Hora</label>
-                <Input type="time" value={reservationTime} onChange={(e) => setReservationTime(e.target.value)} />
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="HH:MM"
+                  value={reservationTime}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^\d:]/g, "")
+                    setReservationTime(v)
+                  }}
+                  onBlur={(e) => {
+                    const m = e.target.value.match(/^(\d{1,2}):(\d{1,2})$/)
+                    if (m) {
+                      const h = Math.min(23, parseInt(m[1], 10))
+                      const min = Math.min(59, parseInt(m[2], 10))
+                      const hh = h.toString().padStart(2, "0")
+                      const mm = min.toString().padStart(2, "0")
+                      setReservationTime(`${hh}:${mm}`)
+                    }
+                  }}
+                />
               </div>
               <div>
                 <label className="text-sm">Nome do Cliente</label>
