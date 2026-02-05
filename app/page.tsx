@@ -439,11 +439,11 @@ export default function Page() {
             style={{ backgroundColor: "#f59e0b", opacity: 1 }}
           >
             {hasExisting && (
-              <div className="absolute right-3 top-3">
+              <div className="absolute right-3 top-3 pulse-outer">
                 <Button
                   onClick={markArrived}
                   disabled={arrived}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base font-extrabold uppercase tracking-wide rounded-full px-5 py-2 shadow-md"
                 >
                   Chegou
                 </Button>
