@@ -8,6 +8,7 @@ html, body, :root {
 
 .pulse-outer {
   position: relative;
+  z-index: 0;
 }
 .pulse-outer::after {
   content: "";
@@ -20,6 +21,8 @@ html, body, :root {
   border-radius: 9999px;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.7);
   animation: pulseRing 1.6s ease-out infinite;
+  pointer-events: none;
+  z-index: 0;
 }
 @keyframes pulseRing {
   0% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.7; }

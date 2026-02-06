@@ -346,6 +346,7 @@ export default function Page() {
     }
     setArrived(true)
     await fetchData()
+    setOpen(false)
   }
 
   const renderGrid = (shift: Shift) => {
@@ -443,7 +444,7 @@ export default function Page() {
                 <Button
                   onClick={markArrived}
                   disabled={arrived}
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base font-extrabold uppercase tracking-wide rounded-full px-5 py-2 shadow-md"
+                  className="relative z-10 bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base font-extrabold uppercase tracking-wide rounded-full px-5 py-2 shadow-md"
                 >
                   Chegou
                 </Button>
