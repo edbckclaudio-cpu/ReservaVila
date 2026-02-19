@@ -244,7 +244,7 @@ export default function Page() {
   const sendWhatsApp = () => {
     if (!phone) return
     const dateText = format(selectedDate, "PPP", { locale: ptBR })
-    const msg = `Olá, sou do Restaurante Vila das Meninas. Esta é uma mensagem que sua reserva do dia ${dateText} às ${reservationTime} para ${guestCount} pessoas, está confirmada`
+    const msg = `Sua reserva no Restaurante Vila das Meninas está confirmada para o dia ${dateText} às ${reservationTime} para ${guestCount} pessoas. Caso tenha algum imprevisto, não esqueça de nos comunicar. Aguardamos você!`
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
     window.open(url, "_blank")
   }
